@@ -4,7 +4,7 @@ const io = require('@pm2/io')
 io.init({
     http: true, https: true, transactions: true
 })
-const db = require('./fake_db')
+const {getProducts, checkUser, registerNewUser, changeUserAvatar, changeUserDisplayName} = require('./fake_db')
 
 const app = express();
 const bcrypt = require('bcrypt');
@@ -13,18 +13,116 @@ app.use(express.json());
 app.use(cors());
 
 app.get('/api/get-products', async (req, res) => {
-    const products = await db()[0]()
+    const products = getProducts()
     console.log(`products: ${products}`)
     res.status(200).json(products)
 })
 app.post('/api/sign-up', async (req, res) => {
-    console.log('Got a sign-up request')
+    console.log('Got a sign-up request', req.body)
+    try {
+        const {err, result} = registerNewUser(
+            {
+                username: req.body.username,
+                passwordHash: req.body.password,
+                email: req.body.email
+            }
+        )
+        if (result === true) {
+            res.status(200).json({message: `Successfully registered user ${req.body.username}`})
+            console.log(`User ${req.body.username} registered`)
+        } else
+            res.status(400).json({message: err?.message})
+    } catch (err) {
+        //"Unknown error"
+        console.log(err)
+        res.status(500)
+    }
+
     res.status(200)
 })
 
-app.get('/api/sign-in', async (req, res) => {
-    console.log('Got a sign-in request')
-    res.status(200)
+app.post('/api/sign-in', async (req, res) => {
+    try {
+        const username = req.body.username
+        const email = req.body.email
+        const password = req.body.password
+        const passwordHash = req.body.passwordHash
+        const {err, result, user} = checkUser(username, email, password, passwordHash)
+        if (result === true) {
+            res.status(200).json(user)
+            console.log(`User ${username || email} signed in`)
+        } else {
+            res.status(400).json({message: err?.message})
+            console.log(err?.message)
+        }
+
+    } catch (err) {
+        //"Unknown error"
+        console.log(err)
+        res.status(500)
+    }
+})
+
+app.post('/api/set-avatar', (req, res) => {
+    console.log('Got a set-avatar request', req.body)
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        res.status(401).json({message: 'No authorization header'})
+        console.log(`No authorization header`)
+        return
+    }
+    const auth = authHeader.split(' ');
+    try {
+        if (auth.length !== 2 || auth[0].toLowerCase() !== 'basic') {
+            res.status(401).json({message: 'Invalid authorization header'})
+            console.log(`Invalid authorization header`)
+            return
+        }
+        const credentials = Buffer.from(auth[1], 'base64').toString('utf-8');
+        const [username, password] = credentials.split(':');
+        const {avatarUrl} = req.body
+        console.log(`avatarUrl: ${avatarUrl}, username: ${username}, passwordHash: ${password}`)
+
+        const {err, result} = changeUserAvatar(avatarUrl, username, password)
+        if (result === true) {
+            res.status(200).json({message: `User ${username} avatar changed successfully`})
+            console.log(`User ${username} avatar changed successfully`)
+        } else  res.status(400).json({message: err?.message})
+    } catch (err) {
+        console.log(err)
+        res.status(400).json({message: err?.message})
+    }
+})
+
+app.post('/api/set-display-name', (req, res) => {
+    console.log('Got a set-display-name request', req.body)
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        res.status(401).json({message: 'No authorization header'})
+        console.log(`No authorization header`)
+        return
+    }
+    const auth = authHeader.split(' ');
+    try {
+        if (auth.length !== 2 || auth[0].toLowerCase() !== 'basic') {
+            res.status(401).json({message: 'Invalid authorization header'})
+            console.log(`Invalid authorization header`)
+            return
+        }
+        const credentials = Buffer.from(auth[1], 'base64').toString('utf-8');
+        const [username, password] = credentials.split(':');
+        const {displayName} = req.body
+        console.log(`displayName: ${displayName}, username: ${username}, passwordHash: ${password}`)
+
+        const {err, result} = changeUserDisplayName(displayName, username, password)
+        if (result === true) {
+            res.status(200).json({message: `User ${username} display name changed successfully`})
+            console.log(`User ${username} display name changed successfully`)
+        } else  res.status(400).json({message: err?.message})
+    } catch (err) {
+        console.log(err)
+        res.status(400).json({message: err?.message})
+    }
 })
 
 app.get('/api', (req, res) => {
