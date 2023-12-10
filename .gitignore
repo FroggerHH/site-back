@@ -2,4 +2,3 @@ node_modules
 .idea
 .env
 db.json
-exampleData.json
